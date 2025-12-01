@@ -34,7 +34,7 @@ pub fn create_actors(
           0,
           [],
           engine,
-          random.float(0.0, 1.0),
+          Some(random.float(0.0, 1.0)),
         ))
         |> actor.on_message(account_message_handler)
         |> actor.start
@@ -337,7 +337,8 @@ pub fn account_message_handler(
       }
       //select the next action for the user to take
       let assert Some(self) = state.subject
-      let #(next_choice, updated_seed) = state.generator |> random.step(seed)
+      let assert Some(generator) = state.generator
+      let #(next_choice, updated_seed) = generator |> random.step(seed)
       process.send_after(
         self,
         state.frequency,

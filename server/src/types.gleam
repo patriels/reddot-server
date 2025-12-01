@@ -16,7 +16,7 @@ pub type Account {
     karma: Int,
     inbox: List(DirectMessage),
     reddit_engine: Subject(EngineMessage),
-    generator: random.Generator(Float),
+    generator: Option(random.Generator(Float)),
   )
 }
 
@@ -142,31 +142,7 @@ pub type Comment {
   )
 }
 
-pub type SimpleComment {
-  TransmitComment(
-    id: Int,
-    content: String,
-    author_username: String,
-    //not zero if a reply to another comment
-    parent_id: Int,
-    up_votes: Int,
-    down_votes: Int,
-  )
-}
-
 //just easier to keep track of what I'm referencing vs using a pair
 pub type DirectMessage {
   DirectMessage(sender: Subject(AccountMessage), message: String)
-}
-
-pub type ClientState {
-  ClientState(
-    self: Subject(AccountMessage),
-    engine: Subject(EngineMessage),
-    username: String,
-  )
-}
-
-pub type MyMessage {
-  Broadcast(String)
 }
