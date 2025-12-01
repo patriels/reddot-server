@@ -26,7 +26,7 @@ pub fn create_actors(
     True -> {
       let assert Ok(actor) =
         actor.new(types.Account(
-          "User" <> int.to_string(index + 1),
+          "User " <> int.to_string(index + 1),
           None,
           curr_freq,
           [],
@@ -72,7 +72,7 @@ pub fn account_message_handler(
       case choice {
         //create a new subreddit
         n if n <. 0.02 -> {
-          let name = "Subreddit created by " <> state.username
+          let name = "Made by " <> state.username
           actor.send(state.reddit_engine, CreateSubReddit(name))
           actor.continue(state)
         }

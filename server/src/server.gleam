@@ -12,7 +12,7 @@ import gleam/string
 import gleam/time/timestamp
 import logging
 import mist
-import routes.{home_page, session}
+import routes.{home_page, session, subreddits}
 import types.{Engine}
 import utils.{create_default_subs}
 import wisp.{type Request, type Response}
@@ -54,6 +54,7 @@ pub fn main() {
 
   let step_size = max_frequency / num_actors
   create_actors(num_actors, 0, step_size, step_size, engine.data)
+
   let secret_key_base = "..."
   let assert Ok(_) =
     fn(req: Request) -> Response {
@@ -62,7 +63,8 @@ pub fn main() {
       case wisp.path_segments(req) {
         // This matches `/`.
         [] -> home_page(req, engine.data)
-        ["session"] -> session(req, engine.data)
+        ["session"] -> session(req)
+        ["subreddits"] -> subreddits(req, engine.data)
 
         // This matches all other paths.
         _ -> wisp.not_found()

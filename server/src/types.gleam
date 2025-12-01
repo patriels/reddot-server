@@ -76,7 +76,7 @@ pub type EngineMessage {
   //for joining a subreddit
   GetSubReddits(user: Subject(AccountMessage))
   //for getting list of subs from external user
-  GetAllSubReddits(client: Subject(AccountMessage))
+  GetAllSubReddits(reply_to: Subject(List(#(Int, String))))
   //for sending messages
   GetAUser(user: Subject(AccountMessage), username: String)
   //user notifies engine it's off or online
@@ -112,19 +112,6 @@ pub type Post {
   )
 }
 
-pub type SimplePost {
-  TransmitPost(
-    id: Int,
-    sub_id: Int,
-    title: String,
-    author_username: String,
-    content: String,
-    comments: dict.Dict(Int, List(Comment)),
-    up_votes: Int,
-    down_votes: Int,
-  )
-}
-
 //lowest element of the "database" hierachy so tracks nothing, just contains information
 //parent id is 0, if it's the first level under a post
 //otherwise the parent id is the id of the comment that this comment was replying to 
@@ -146,3 +133,5 @@ pub type Comment {
 pub type DirectMessage {
   DirectMessage(sender: Subject(AccountMessage), message: String)
 }
+
+pub type ServerState

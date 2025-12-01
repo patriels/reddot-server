@@ -393,15 +393,10 @@ pub fn engine_message_handler(
       actor.continue(state)
     }
     GetAllSubReddits(client) -> {
-      let result =
-        "action=getsubs&content="
-        <> list.fold(dict.values(state.subreddits), "", fn(res, sub) {
-          res <> int.to_string(sub.id) <> " - " <> sub.name <> ","
-        })
-      let len = string.length(result)
-      let res = string.slice(result, 0, len - 1)
-      io.println(res)
-      actor.send(client, GetSubs(res))
+      //get all subreddit ids
+      let subs =
+        list.map(dict.values(state.subreddits), fn(sub) { #(sub.id, sub.name) })
+      actor.send(client, subs)
       actor.continue(state)
     }
     GetAUser(user, username) -> {

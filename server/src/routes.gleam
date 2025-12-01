@@ -1,11 +1,12 @@
 import account.{account_message_handler}
 import gleam/erlang/process.{type Subject}
 import gleam/http.{Delete, Get, Post}
+import gleam/int
 import gleam/list
 import gleam/option.{None}
 import gleam/otp/actor
 import gleam/string
-import types.{type EngineMessage, Account, Join, Start}
+import types.{type EngineMessage, Account, GetAllSubReddits, Join, Start}
 import wisp.{type Request, type Response}
 
 const cookie_name = "id"
@@ -18,6 +19,9 @@ pub fn home_page(req: Request, engine: Subject(EngineMessage)) -> Response {
         "<form action='/session?_method=DELETE' method='post'>",
         "  <button type='submit'>Log out</button>",
         "</form>",
+        "<ul>",
+        "<li><a href='/subreddits'>View Available SubReddits</a></li>",
+        "</ul>",
       ]
       |> string.concat
       |> wisp.html_response(200)
@@ -28,10 +32,43 @@ pub fn home_page(req: Request, engine: Subject(EngineMessage)) -> Response {
   }
 }
 
-pub fn session(req: Request, engine: Subject(EngineMessage)) -> Response {
+pub fn subreddits(req: Request, engine: Subject(EngineMessage)) -> Response {
+  case req.method {
+    Get -> view_subreddits(req, engine)
+    Post -> create_session(req)
+    Delete -> destroy_session(req)
+    _ -> wisp.method_not_allowed([Get, Post, Delete])
+  }
+}
+
+pub fn view_subreddits(req: Request, engine: Subject(EngineMessage)) -> Response {
+  case wisp.get_cookie(req, cookie_name, wisp.Signed) {
+    Ok(_name) -> {
+      let list = process.call(engine, 100, GetAllSubReddits)
+      let html =
+        "<h1>Available SubReddits</h1>"
+        <> list.fold(list, "", fn(result, sub) {
+          result
+          <> "<form action='/subreddits' method='post'><label>"
+          <> sub.1
+          <> "<input type='submit' id='"
+          <> int.to_string(sub.0)
+          <> "'>
+      </form>"
+        })
+
+      html |> wisp.html_response(200)
+    }
+    Error(_) -> {
+      wisp.redirect("/session")
+    }
+  }
+}
+
+pub fn session(req: Request) -> Response {
   case req.method {
     Get -> new_session()
-    Post -> create_session(req, engine)
+    Post -> create_session(req)
     Delete -> destroy_session(req)
     _ -> wisp.method_not_allowed([Get, Post, Delete])
   }
@@ -58,16 +95,10 @@ pub fn destroy_session(req: Request) -> Response {
   }
 }
 
-pub fn create_session(req: Request, engine: Subject(EngineMessage)) -> Response {
+pub fn create_session(req: Request) -> Response {
   use formdata <- wisp.require_form(req)
   case list.key_find(formdata.values, "name") {
     Ok(name) -> {
-      let assert Ok(actor) =
-        actor.new(Account(name, None, 0, [], [], 0, [], engine, None))
-        |> actor.on_message(account_message_handler)
-        |> actor.start
-      actor.send(actor.data, Start(actor.data))
-      actor.send(engine, Join(actor.data, name))
       wisp.redirect("/")
       |> wisp.set_cookie(req, cookie_name, name, wisp.Signed, 60 * 60 * 24)
     }
