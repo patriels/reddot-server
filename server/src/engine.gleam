@@ -394,7 +394,7 @@ pub fn engine_message_handler(
     OnlineUpdate(num) -> {
       actor.continue(Engine(..state, online: { state.online + num }))
     }
-    GetPost(sub_id, post_id) -> {
+    GetPost(_sub_id, _post_id) -> {
       actor.continue(state)
     }
   }

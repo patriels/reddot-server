@@ -157,5 +157,9 @@ pub type ServerState {
 pub type ServerMessage {
   AddUser(username: String)
   RemoveUser(username: String)
-  GetUser(reply_to: Subject(Subject(AccountMessage)), username: String)
+  GetUser(
+    reply_to: Subject(Result(Subject(AccountMessage), Nil)),
+    username: String,
+  )
+  GetRandomUser(reply_to: Subject(Subject(AccountMessage)), usernane: String)
 }

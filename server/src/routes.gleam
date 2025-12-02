@@ -8,7 +8,7 @@ import gleam/string
 import logging
 import types.{
   type EngineMessage, type ServerMessage, AddUser, GetAllSubReddits, GetFeed,
-  GetUser, RemoveUser, Subscribe,
+  GetRandomUser, GetUser, RemoveUser, Subscribe,
 }
 import wisp.{type Request, type Response}
 
@@ -29,6 +29,7 @@ pub fn home_page(req: Request) -> Response {
         "<ul>",
         "<li><a href='/subreddits'>View Available SubReddits</a></li>",
         "<li><a href='/feed'>View Your Feed</a></li>",
+        "<li><a href='/getuser'>Get a User</a><li>",
         "</ul>",
         "</div>",
       ]
@@ -45,31 +46,42 @@ pub fn feed(req: Request, server: Subject(ServerMessage)) -> Response {
   case wisp.get_cookie(req, cookie_name, wisp.Signed) {
     Ok(name) -> {
       logging.log(logging.Info, name <> " wants to view their feed")
-      let actor = process.call(server, 100, GetUser(_, name))
-      let post_list = process.call(actor, 100, GetFeed)
-      let html_list = [
-        get_css(),
-        "<div class='w3-main w3-content w3-padding' style='max-width:1200px;margin-top:100px'>",
-        "<h1>" <> name <> "'s Feed</h1>",
-      ]
-      let posts =
-        list.map(post_list, fn(post) {
-          let html = [
-            "<div>",
-            "<h5>" <> post.title <> " by " <> post.author_username <> "</h5>",
-            "<p>" <> post.content <> "</p>",
-            "<a href=\"/post?post_id="
-              <> int.to_string(post.id)
-              <> "&sub_id="
-              <> int.to_string(post.id)
-              <> "\"/>View Comments</a>",
-            "</div>",
+      let actor_opt = process.call(server, 100, GetUser(_, name))
+      case actor_opt {
+        Error(_) -> {
+          wisp.redirect("/session")
+        }
+        Ok(actor) -> {
+          let post_list = process.call(actor, 100, GetFeed)
+          let html_list = [
+            get_css(),
+            "<div class='w3-main w3-content w3-padding' style='max-width:1200px;margin-top:100px'>",
+            "<h1>" <> name <> "'s Feed</h1>",
           ]
-          string.concat(html)
-        })
+          let posts =
+            list.map(post_list, fn(post) {
+              let html = [
+                "<div>",
+                "<h5>"
+                  <> post.title
+                  <> " by "
+                  <> post.author_username
+                  <> "</h5>",
+                "<p>" <> post.content <> "</p>",
+                "<a href=\"/post?post_id="
+                  <> int.to_string(post.id)
+                  <> "&sub_id="
+                  <> int.to_string(post.sub_id)
+                  <> "\"/>View Comments</a>",
+                "</div>",
+              ]
+              string.concat(html)
+            })
 
-      let html_list = list.append(html_list, posts)
-      string.concat(html_list) |> wisp.html_response(200)
+          let html_list = list.append(html_list, posts)
+          string.concat(html_list) |> wisp.html_response(200)
+        }
+      }
     }
     Error(_) -> {
       wisp.redirect("/session")
@@ -77,7 +89,7 @@ pub fn feed(req: Request, server: Subject(ServerMessage)) -> Response {
   }
 }
 
-pub fn post(req: Request, server: Subject(ServerMessage)) -> Response {
+pub fn post(req: Request, _server: Subject(ServerMessage)) -> Response {
   case wisp.get_cookie(req, cookie_name, wisp.Signed) {
     Ok(name) -> {
       case list.key_find(wisp.get_query(req), "post_id") {
@@ -160,10 +172,18 @@ pub fn subscribe(req: Request, server: Subject(ServerMessage)) -> Response {
             logging.Info,
             name <> " wants to join subreddit " <> sub_id,
           )
-          let actor = process.call(server, 100, GetUser(_, name))
-          let assert Ok(sub_id) = int.parse(sub_id)
-          actor.send(actor, Subscribe(sub_id))
-          wisp.redirect("/")
+
+          let actor_opt = process.call(server, 100, GetUser(_, name))
+          case actor_opt {
+            Error(_) -> {
+              wisp.redirect("/session")
+            }
+            Ok(actor) -> {
+              let assert Ok(sub_id) = int.parse(sub_id)
+              actor.send(actor, Subscribe(sub_id))
+              wisp.redirect("/")
+            }
+          }
         }
         Error(_) -> {
           logging.log(logging.Info, "didn't find id")
@@ -221,5 +241,32 @@ pub fn destroy_session(req: Request, server: Subject(ServerMessage)) -> Response
       wisp.set_cookie(resp, req, cookie_name, value, wisp.Signed, 0)
     }
     Error(_) -> resp
+  }
+}
+
+pub fn get_random_user(req: Request, server: Subject(ServerMessage)) -> Response {
+  case wisp.get_cookie(req, cookie_name, wisp.Signed) {
+    Ok(name) -> {
+      logging.log(logging.Info, name <> " wants another user to message")
+      let actor_opt = process.call(server, 100, GetUser(_, name))
+      case actor_opt {
+        Error(_) -> wisp.redirect("/session")
+        Ok(_actor) -> {
+          let _user_to_message =
+            process.call(server, 100, GetRandomUser(_, name))
+
+          let html_list = [
+            get_css(),
+            "<div class='w3-main w3-content w3-padding' style='max-width:1200px;margin-top:100px'>",
+            "<h1>" <> "Messaging random user" <> "</h1>",
+          ]
+
+          string.concat(html_list) |> wisp.html_response(200)
+        }
+      }
+    }
+    Error(_) -> {
+      wisp.redirect("/session")
+    }
   }
 }
