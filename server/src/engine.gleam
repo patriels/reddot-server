@@ -1,17 +1,15 @@
 import gleam/dict
 import gleam/erlang/process
 import gleam/int
-import gleam/io
 import gleam/list
 import gleam/otp/actor
 import gleam/pair
-import gleam/string
 import types.{
   type Comment, type Engine, type EngineMessage, AddToFeed, Comment,
-  CommentOnPost, CreateSubReddit, DownVoteComment, DownVotePost, Engine,
-  GetAUser, GetAllSubReddits, GetSubReddits, GetSubs, Join, JoinSub,
-  JoinSubReddit, LeaveSubReddit, OnlineUpdate, Post, PostInSub, ReplyToComment,
-  SendDM, SubReddit, UpVoteComment, UpVotePost, UpdateKarma,
+  CreateSubReddit, DownVoteComment, DownVotePost, Engine, GetAUser,
+  GetAllSubReddits, GetPost, GetSubReddits, Join, JoinSub, JoinSubReddit, Leave,
+  LeaveSubReddit, OnlineUpdate, Post, PostComment, PostInSub, SendDM, SubReddit,
+  UpVoteComment, UpVotePost, UpdateKarma,
 }
 
 //functions for engine
@@ -50,6 +48,16 @@ pub fn engine_message_handler(
         Engine(
           ..state,
           users: dict.insert(state.users, username, user),
+          online: { state.online + 1 },
+          trans_count: { state.trans_count + 1 },
+        ),
+      )
+    }
+    Leave(user) -> {
+      actor.continue(
+        Engine(
+          ..state,
+          users: dict.delete(state.users, user),
           online: { state.online + 1 },
           trans_count: { state.trans_count + 1 },
         ),
@@ -135,7 +143,7 @@ pub fn engine_message_handler(
         })
       actor.continue(new_state)
     }
-    CommentOnPost(sub_id, post_id, comment) -> {
+    PostComment(sub_id, post_id, parent_id, comment) -> {
       //get sub to post in
       let assert Ok(sub) = dict.get(state.subreddits, sub_id)
 
@@ -145,49 +153,7 @@ pub fn engine_message_handler(
       //issue comment new id
       let comments = list.flatten(dict.values(post.comments))
       let comment_id = list.length(comments) + 1
-      let comment = Comment(..comment, id: comment_id)
-
-      //add new comment to the post's map of comments
-      let updated_comments = add_comment(post.comments, comment)
-
-      //update post with new comments map
-      let updated_post = Post(..post, comments: updated_comments)
-
-      //insert new post into subreddits post dictionary
-      let updated_posts = dict.insert(sub.posts, post_id, updated_post)
-
-      //sends a new post with updated karma to the users
-      list.each(sub.subscribers, fn(subscriber) {
-        actor.send(subscriber, AddToFeed(updated_post))
-      })
-
-      //update subreddit with updated list of posts
-      let updated_sub = SubReddit(..sub, posts: updated_posts)
-
-      //update map of subs the engine keeps track of
-      let updated_subreddits =
-        dict.insert(state.subreddits, sub_id, updated_sub)
-
-      //update reddit engine state to include updated list of subreddits
-      //and count this towards transmissions
-      let new_state =
-        Engine(..state, subreddits: updated_subreddits, trans_count: {
-          state.trans_count + 1
-        })
-      actor.continue(new_state)
-    }
-    ReplyToComment(sub_id, post_id, existing_comment_id, comment) -> {
-      //get sub to post in
-      let assert Ok(sub) = dict.get(state.subreddits, sub_id)
-
-      //get post to comment on 
-      let assert Ok(post) = dict.get(sub.posts, post_id)
-
-      //issue comment new id
-      let comments = list.flatten(dict.values(post.comments))
-      let comment_id = list.length(comments) + 1
-      let comment =
-        Comment(..comment, id: comment_id, parent_id: existing_comment_id)
+      let comment = Comment(..comment, id: comment_id, parent_id: parent_id)
 
       //update comment bucket with new list
       let updated_comments = add_comment(post.comments, comment)
@@ -388,8 +354,9 @@ pub fn engine_message_handler(
     }
     GetSubReddits(client) -> {
       //get all subreddit ids
-      let sub_ids = list.map(dict.keys(state.subreddits), fn(sub) { sub })
-      process.send(client, JoinSub(sub_ids))
+      let subs =
+        list.map(dict.values(state.subreddits), fn(sub) { #(sub.id, sub.name) })
+      process.send(client, JoinSub(subs))
       actor.continue(state)
     }
     GetAllSubReddits(client) -> {
@@ -426,6 +393,9 @@ pub fn engine_message_handler(
     }
     OnlineUpdate(num) -> {
       actor.continue(Engine(..state, online: { state.online + num }))
+    }
+    GetPost(sub_id, post_id) -> {
+      actor.continue(state)
     }
   }
 }

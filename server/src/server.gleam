@@ -1,19 +1,20 @@
-import account.{create_actors}
+import account.{account_message_handler, create_actors}
 import argv
-import client_types.{type Account}
 import engine.{engine_message_handler}
 import gleam/dict
-import gleam/erlang/process.{type Subject}
+import gleam/erlang/process
 import gleam/int
-import gleam/io
 import gleam/list
+import gleam/option.{None}
 import gleam/otp/actor
-import gleam/string
 import gleam/time/timestamp
 import logging
 import mist
-import routes.{home_page, session, subreddits}
-import types.{Engine}
+import routes.{feed, home_page, post, session, subreddits}
+import types.{
+  type ServerMessage, type ServerState, AddUser, Engine, GetUser, Join, Leave,
+  RemoveUser, ServerState, Start,
+}
 import utils.{create_default_subs}
 import wisp.{type Request, type Response}
 import wisp/wisp_mist
@@ -52,6 +53,11 @@ pub fn main() {
     |> actor.on_message(engine_message_handler)
     |> actor.start
 
+  let assert Ok(server) =
+    actor.new(ServerState(dict.new(), engine.data))
+    |> actor.on_message(server_handler)
+    |> actor.start
+
   let step_size = max_frequency / num_actors
   create_actors(num_actors, 0, step_size, step_size, engine.data)
 
@@ -62,10 +68,11 @@ pub fn main() {
       use <- wisp.serve_static(req, under: "/static", from: "/public")
       case wisp.path_segments(req) {
         // This matches `/`.
-        [] -> home_page(req, engine.data)
-        ["session"] -> session(req)
-        ["subreddits"] -> subreddits(req, engine.data)
-
+        [] -> home_page(req)
+        ["session"] -> session(req, server.data)
+        ["subreddits"] -> subreddits(req, server.data, engine.data)
+        ["feed"] -> feed(req, server.data)
+        ["post"] -> post(req, server.data)
         // This matches all other paths.
         _ -> wisp.not_found()
       }
@@ -75,4 +82,48 @@ pub fn main() {
     |> mist.port(3000)
     |> mist.start
   process.sleep_forever()
+}
+
+pub fn server_handler(
+  state: ServerState,
+  message: ServerMessage,
+) -> actor.Next(ServerState, ServerMessage) {
+  case message {
+    AddUser(username) -> {
+      let assert Ok(actor) =
+        actor.new(types.Account(
+          username,
+          None,
+          0,
+          [],
+          [],
+          0,
+          [],
+          state.engine,
+          None,
+        ))
+        |> actor.on_message(account_message_handler)
+        |> actor.start
+
+      actor.send(actor.data, Start(actor.data))
+      actor.send(state.engine, Join(actor.data, username))
+      actor.continue(
+        ServerState(
+          ..state,
+          users: dict.insert(state.users, username, actor.data),
+        ),
+      )
+    }
+    RemoveUser(username) -> {
+      actor.send(state.engine, Leave(username))
+      actor.continue(
+        ServerState(..state, users: dict.delete(state.users, username)),
+      )
+    }
+    GetUser(reply, username) -> {
+      let assert Ok(user) = dict.get(state.users, username)
+      process.send(reply, user)
+      actor.continue(state)
+    }
+  }
 }

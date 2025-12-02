@@ -11,7 +11,7 @@ pub type Account {
     username: String,
     subject: Option(Subject(AccountMessage)),
     frequency: Int,
-    subreddits: List(Int),
+    subreddits: List(#(Int, String)),
     feed: List(Post),
     karma: Int,
     inbox: List(DirectMessage),
@@ -26,7 +26,7 @@ pub type AccountMessage {
   //the actor uses the number it's given to choose its next action
   NextAction(choice: Float, seed: seed.Seed)
   //get a subreddit first so you can join it
-  JoinSub(all_subs: List(Int))
+  JoinSub(all_subs: List(#(Int, String)))
   //messaging between users
   ReceiveDM(message: DirectMessage)
   //get a user to message from reddit engine
@@ -36,7 +36,24 @@ pub type AccountMessage {
   //update feed when new post comes in
   AddToFeed(post: Post)
   //commands for external users
-  GetSubs(subs: String)
+  GetFeed(reply_to: Subject(List(Post)))
+  GetInbox(reply_to: Subject(List(DirectMessage)))
+  GetKarma(reply_to: Subject(Int))
+  GetSubscriptions(reply_to: Subject(List(#(Int, String))))
+  SendMessage(content: String, recpt: Subject(AccountMessage))
+  Subscribe(sub_id: Int)
+  Unsubscribe(sub_id: Int)
+  PostToSub(sub_id: Int, title: String, content: String)
+  MakeAComment(sub_id: Int, post_id: Int, parent_id: Int, content: String)
+  PostVote(sub_id: Int, post_id: Int, vote: Int)
+  CommentVote(
+    sub_id: Int,
+    post_id: Int,
+    parent_id: Int,
+    comment_id: Int,
+    vote: Int,
+  )
+  Quit
 }
 
 pub type Engine {
@@ -58,17 +75,12 @@ pub type Engine {
 pub type EngineMessage {
   //main functions
   Join(user: Subject(AccountMessage), username: String)
+  Leave(user: String)
   CreateSubReddit(name: String)
   JoinSubReddit(sub_id: Int, user: Subject(AccountMessage))
   LeaveSubReddit(sub_id: Int, user: Subject(AccountMessage))
   PostInSub(sub_id: Int, post: Post)
-  CommentOnPost(sub_id: Int, post_id: Int, comment: Comment)
-  ReplyToComment(
-    sub_id: Int,
-    post_id: Int,
-    existing_comment_id: Int,
-    new_comment: Comment,
-  )
+  PostComment(sub_id: Int, post_id: Int, parent_id: Int, comment: Comment)
   UpVotePost(sub_id: Int, post_id: Int)
   DownVotePost(sub_id: Int, post_id: Int)
   UpVoteComment(sub_id: Int, post_id: Int, parent_id: Int, comment_id: Int)
@@ -81,6 +93,7 @@ pub type EngineMessage {
   GetAUser(user: Subject(AccountMessage), username: String)
   //user notifies engine it's off or online
   OnlineUpdate(int: Int)
+  GetPost(sub_id: Int, post_id: Int)
 }
 
 //trying to replicate a database so this would be the subreddit table
@@ -134,4 +147,15 @@ pub type DirectMessage {
   DirectMessage(sender: Subject(AccountMessage), message: String)
 }
 
-pub type ServerState
+pub type ServerState {
+  ServerState(
+    users: dict.Dict(String, Subject(AccountMessage)),
+    engine: Subject(EngineMessage),
+  )
+}
+
+pub type ServerMessage {
+  AddUser(username: String)
+  RemoveUser(username: String)
+  GetUser(reply_to: Subject(Subject(AccountMessage)), username: String)
+}

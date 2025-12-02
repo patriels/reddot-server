@@ -3,7 +3,6 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/pair
-import gleam/string
 import gleam/time/duration
 import gleam/time/timestamp
 import types.{type Comment, type Engine, type Post, type SubReddit}
@@ -39,12 +38,12 @@ pub fn create_default_subs(
 }
 
 //functions for account handler
-pub fn get_random_id(list: List(Int)) -> Int {
+pub fn get_random_sub(list: List(#(Int, String))) -> #(Int, String) {
   let len = list.length(list)
   case len == 1 {
     True -> {
-      let assert Ok(sub_id) = list.first(list)
-      sub_id
+      let assert Ok(sub) = list.first(list)
+      sub
     }
     False -> {
       //select random item in the list
@@ -52,8 +51,8 @@ pub fn get_random_id(list: List(Int)) -> Int {
       //splits list in two before the index
       let split = list.split(list, index)
       //get first item in second list from splits
-      let assert Ok(sub_id) = list.first(pair.second(split))
-      sub_id
+      let assert Ok(sub) = list.first(pair.second(split))
+      sub
     }
   }
 }
@@ -154,10 +153,4 @@ pub fn print_engine(reddit: Engine) -> Nil {
     <> "\n"
     <> "-----------------------------------------------------------\n",
   )
-}
-
-pub fn ints_to_string(ints: List(Int)) -> String {
-  ints
-  |> list.map(int.to_string)
-  |> string.join(",")
 }

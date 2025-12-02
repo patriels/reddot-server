@@ -8,12 +8,14 @@ import prng/random
 import prng/seed
 import types.{
   type Account, type AccountMessage, type EngineMessage, Account, AddToFeed,
-  Comment, CommentOnPost, CreateSubReddit, DirectMessage, DownVoteComment,
-  DownVotePost, GetAUser, GetSubReddits, GetSubs, Join, JoinSub, JoinSubReddit,
-  NextAction, OnlineUpdate, Post, PostInSub, ReceiveDM, ReplyToComment, SendDM,
-  Start, UpVoteComment, UpVotePost, UpdateKarma,
+  Comment, CommentVote, CreateSubReddit, DirectMessage, DownVoteComment,
+  DownVotePost, GetAUser, GetFeed, GetInbox, GetKarma, GetSubReddits,
+  GetSubscriptions, Join, JoinSub, JoinSubReddit, LeaveSubReddit, MakeAComment,
+  NextAction, OnlineUpdate, Post, PostComment, PostInSub, PostToSub, PostVote,
+  Quit, ReceiveDM, SendDM, SendMessage, Start, Subscribe, Unsubscribe,
+  UpVoteComment, UpVotePost, UpdateKarma,
 }
-import utils.{flip_a_coin, get_random_comment, get_random_id, get_random_post}
+import utils.{flip_a_coin, get_random_comment, get_random_post, get_random_sub}
 
 pub fn create_actors(
   num: Int,
@@ -41,7 +43,7 @@ pub fn create_actors(
       //update actor with own subject for further operations
       actor.send(actor.data, Start(actor.data))
       //make user known to reddit engine
-      actor.send(engine, Join(actor.data, "User" <> int.to_string(index + 1)))
+      actor.send(engine, Join(actor.data, "User " <> int.to_string(index + 1)))
       //all users first action is to join a subreddit
       actor.send(actor.data, NextAction(0.035, seed.new(index)))
       //continue creating actors
@@ -63,8 +65,88 @@ pub fn account_message_handler(
       //io.println("User " <> state.username <> " is up and running")
       actor.continue(Account(..state, subject: Some(sbj)))
     }
-    GetSubs(_subs) -> {
+    GetFeed(reply) -> {
+      process.send(reply, state.feed)
       actor.continue(state)
+    }
+    GetInbox(reply) -> {
+      actor.send(reply, state.inbox)
+      actor.continue(state)
+    }
+    GetKarma(reply) -> {
+      actor.send(reply, state.karma)
+      actor.continue(state)
+    }
+    GetSubscriptions(reply) -> {
+      actor.send(reply, state.subreddits)
+      actor.continue(state)
+    }
+    SendMessage(content, recpt) -> {
+      let assert Some(self) = state.subject
+      let dm = DirectMessage(self, content)
+      actor.send(recpt, ReceiveDM(dm))
+      actor.continue(state)
+    }
+    Subscribe(sub_id) -> {
+      let assert Some(self) = state.subject
+      actor.send(state.reddit_engine, JoinSubReddit(sub_id, self))
+      actor.continue(state)
+    }
+    Unsubscribe(sub_id) -> {
+      let assert Some(self) = state.subject
+      actor.send(state.reddit_engine, LeaveSubReddit(sub_id, self))
+      actor.continue(state)
+    }
+    PostToSub(sub_id, title, content) -> {
+      let assert Some(self) = state.subject
+      let post =
+        Post(0, sub_id, title, state.username, self, content, dict.new(), 0, 0)
+      actor.send(state.reddit_engine, PostInSub(sub_id, post))
+      actor.continue(state)
+    }
+    MakeAComment(sub_id, post_id, parent_id, content) -> {
+      let assert Some(self) = state.subject
+      let comment = Comment(0, content, state.username, self, parent_id, 0, 0)
+      actor.send(
+        state.reddit_engine,
+        PostComment(sub_id, post_id, parent_id, comment),
+      )
+      actor.continue(state)
+    }
+    PostVote(sub_id, post_id, vote) -> {
+      case vote {
+        1 -> {
+          actor.send(state.reddit_engine, UpVotePost(sub_id, post_id))
+          actor.continue(state)
+        }
+        -1 -> {
+          actor.send(state.reddit_engine, DownVotePost(sub_id, post_id))
+          actor.continue(state)
+        }
+        _ -> actor.continue(state)
+      }
+    }
+    CommentVote(sub_id, post_id, parent_id, comment_id, vote) -> {
+      case vote {
+        1 -> {
+          actor.send(
+            state.reddit_engine,
+            UpVoteComment(sub_id, post_id, parent_id, comment_id),
+          )
+          actor.continue(state)
+        }
+        -1 -> {
+          actor.send(
+            state.reddit_engine,
+            DownVoteComment(sub_id, post_id, parent_id, comment_id),
+          )
+          actor.continue(state)
+        }
+        _ -> actor.continue(state)
+      }
+    }
+    Quit -> {
+      actor.stop()
     }
     NextAction(choice, seed) -> {
       //echo choice
@@ -91,7 +173,7 @@ pub fn account_message_handler(
           case list.length(state.subreddits) > 2 {
             True -> {
               //get a subreddits to leave
-              let sub_id = get_random_id(state.subreddits)
+              let sub_id = get_random_sub(state.subreddits)
               let updated_subs =
                 list.drop_while(state.subreddits, fn(sub) { sub == sub_id })
               //io.println("User " <> state.username <> " left a subreddit.")
@@ -109,29 +191,24 @@ pub fn account_message_handler(
           case !list.is_empty(state.subreddits) {
             True -> {
               //get random sub id
-              let sub_id = get_random_id(state.subreddits)
+              let sub = get_random_sub(state.subreddits)
               //need self to get Karma updates
               let assert Some(self) = state.subject
               let post =
                 Post(
                   0,
-                  sub_id,
-                  {
-                    "This is a cool topics idea "
-                    <> state.username
-                    <> " wants to talk about."
-                  },
+                  sub.0,
+                  { "Topic somoneone wants to talk about" },
                   state.username,
                   self,
                   {
-                    "Imagine this has a lot of conent about something interesting. A lot of great points were made, then they lost you. This is a post by "
-                    <> state.username
+                    "Imagine this has a lot of conent about something interesting. A lot of great points were made, then they lost you."
                   },
                   dict.new(),
                   0,
                   0,
                 )
-              actor.send(state.reddit_engine, PostInSub(sub_id, post))
+              actor.send(state.reddit_engine, PostInSub(sub.0, post))
               //io.println("User " <> state.username <> " made a post.")
               actor.continue(state)
             }
@@ -173,7 +250,7 @@ pub fn account_message_handler(
                   let existing_comment = get_random_comment(comments)
                   actor.send(
                     state.reddit_engine,
-                    ReplyToComment(
+                    PostComment(
                       post.sub_id,
                       post.id,
                       existing_comment.id,
@@ -188,7 +265,7 @@ pub fn account_message_handler(
                 False -> {
                   actor.send(
                     state.reddit_engine,
-                    CommentOnPost(post.sub_id, post.id, comment),
+                    PostComment(post.sub_id, post.id, 0, comment),
                   )
                   //io.println(
                   //"User " <> state.username <> " commented on a post.",
@@ -302,7 +379,7 @@ pub fn account_message_handler(
               //<> post.author_username,
               //)
               //select random sub from subscribed subreddits to repost in (can be the same subreddit)
-              let sub = get_random_id(state.subreddits)
+              let sub = get_random_sub(state.subreddits)
               //update post's to current author and new subreddit
               let assert Some(self) = state.subject
               let post =
@@ -310,9 +387,9 @@ pub fn account_message_handler(
                   ..post,
                   author_username: state.username,
                   author_subject: self,
-                  sub_id: sub,
+                  sub_id: sub.0,
                 )
-              actor.send(state.reddit_engine, PostInSub(sub, post))
+              actor.send(state.reddit_engine, PostInSub(sub.0, post))
               actor.continue(state)
             }
           }
@@ -358,13 +435,13 @@ pub fn account_message_handler(
         }
         False -> {
           //get the id of one of the avilable subreddits
-          let sub_index = get_random_id(filtered)
+          let sub = get_random_sub(filtered)
           //io.println("Choosen sub: " <> int.to_string(sub_index))
           //send self's subject so you can get updates
           let assert Some(self) = state.subject
-          actor.send(state.reddit_engine, JoinSubReddit(sub_index, self))
+          actor.send(state.reddit_engine, JoinSubReddit(sub.0, self))
           //update subreddits account is subscribed to
-          let updated_subs = list.append(state.subreddits, [sub_index])
+          let updated_subs = list.append(state.subreddits, [sub])
           //io.println(
           //"User " <> state.username <> " subscribed to a new subreddit",
           //)
@@ -373,24 +450,33 @@ pub fn account_message_handler(
       }
     }
     ReceiveDM(message) -> {
-      //choose to ignore the message or reply to it
-      //otherwise the messages will just ping pong forever
-      let choice = int.random(2)
-      case choice {
-        //ignore message
-        0 -> {
-          actor.continue(
-            Account(..state, inbox: list.append(state.inbox, [message])),
-          )
+      case option.is_some(state.generator) {
+        True -> {
+          //choose to ignore the message or reply to it
+          //otherwise the messages will just ping pong forever
+          let choice = int.random(2)
+          case choice {
+            //ignore message
+            0 -> {
+              actor.continue(
+                Account(..state, inbox: list.append(state.inbox, [message])),
+              )
+            }
+            //reply to message
+            _ -> {
+              let assert Some(self) = state.subject
+              let reply =
+                DirectMessage(self, {
+                  state.username <> " sent you a really cool message."
+                })
+              actor.send(message.sender, ReceiveDM(reply))
+              actor.continue(
+                Account(..state, inbox: list.append(state.inbox, [message])),
+              )
+            }
+          }
         }
-        //reply to message
-        _ -> {
-          let assert Some(self) = state.subject
-          let reply =
-            DirectMessage(self, {
-              state.username <> " sent you a really cool message."
-            })
-          actor.send(message.sender, ReceiveDM(reply))
+        False -> {
           actor.continue(
             Account(..state, inbox: list.append(state.inbox, [message])),
           )
