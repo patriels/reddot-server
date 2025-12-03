@@ -4,6 +4,7 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/otp/actor
+import gleam/pair
 import prng/random
 import prng/seed
 import types.{
@@ -102,9 +103,11 @@ pub fn account_message_handler(
       )
     }
     Unsubscribe(sub_id) -> {
+      let new_list =
+        list.filter(state.subreddits, fn(x) { pair.first(x) != sub_id })
       let assert Some(self) = state.subject
       actor.send(state.reddit_engine, LeaveSubReddit(sub_id, self))
-      actor.continue(state)
+      actor.continue(Account(..state, subreddits: new_list))
     }
     PostToSub(sub_id, title, content) -> {
       let assert Some(self) = state.subject

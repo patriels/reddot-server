@@ -224,7 +224,7 @@ pub fn engine_message_handler(
       let assert Ok(post) = dict.get(sub.posts, post_id)
 
       //update post with new comments map
-      let updated_post = Post(..post, up_votes: { post.down_votes + 1 })
+      let updated_post = Post(..post, down_votes: { post.down_votes + 1 })
 
       //update post owner's karma
       actor.send(post.author_subject, UpdateKarma(-1))

@@ -8,8 +8,9 @@ import gleam/otp/actor
 import gleam/string
 import logging
 import types.{
-  type EngineMessage, type ServerMessage, AddUser, GetAllSubReddits, GetFeed,
-  GetUser, RemoveUser, Subscribe,
+  type EngineMessage, type ServerMessage, AddUser, DownVotePost,
+  GetAllSubReddits, GetFeed, GetUser, RemoveUser, Subscribe, Unsubscribe,
+  UpVotePost,
 }
 import utils
 import wisp.{type Request, type Response}
@@ -87,7 +88,7 @@ pub fn feed(req: Request, server: Subject(ServerMessage)) -> Response {
                   <> int.to_string(post.id)
                   <> "&sub_id="
                   <> int.to_string(post.sub_id)
-                  <> "\"/>View Comments</a>",
+                  <> "\"/>View Post and Comments</a>",
                 "</div>",
               ]
               string.concat(html)
@@ -182,7 +183,7 @@ pub fn send_message(
     Ok(name) -> {
       case list.key_find(formdata.values, "content") {
         Ok(content) -> {
-          let assert Ok(username) = list.key_find(formdata.values, "username")
+          let assert Ok(username) = list.key_find(formdata.values, "user_name")
           logging.log(logging.Info, name <> " wants to post a comment")
           let actor_opt = process.call(server, 100, GetUser(_, name))
           case actor_opt {
@@ -225,7 +226,14 @@ pub fn post(
 ) -> Response {
   case req.method {
     Get -> view_post(req, engine)
-    Post -> post_comment(req, server)
+    Post -> {
+      use formdata <- wisp.require_form(req)
+      case list.key_find(formdata.values, "action") {
+        Ok("comment") -> post_comment(req, server)
+        Ok("vote") -> post_vote(req, engine)
+        _ -> wisp.method_not_allowed([Post])
+      }
+    }
     //Delete -> destroy_session(req)
     _ -> wisp.method_not_allowed([Get, Post, Delete])
   }
@@ -251,23 +259,36 @@ pub fn view_post(req: Request, engine: Subject(EngineMessage)) -> Response {
             "<h1>" <> post.title <> "</h1>",
             "<h3> posted by " <> post.author_username <> "</h3>",
             "<p>" <> post.content <> "</p>",
-            "<p>",
-            int.to_string(post.up_votes),
-            " <a href=\"/post_vote?post_id="
+            "<div>",
+            "<span>" <> int.to_string(post.up_votes) <> "</span>",
+            "<form action='/post' method='post' style='display:inline'>",
+            "  <input type='hidden' name='action' value='vote'/>",
+            "  <input type='hidden' name='post_id' value='"
               <> int.to_string(post.id)
-              <> "&sub_id="
+              <> "'/>",
+            "  <input type='hidden' name='sub_id' value='"
               <> int.to_string(post.sub_id)
-              <> "&vote=1\"/>Up Vote</a>",
-            int.to_string(post.down_votes),
-            " <a href=\"/post_vote?post_id="
+              <> "'/>",
+            "  <input type='hidden' name='vote' value='1'/>",
+            "  <button type='submit'>Up Vote</button>",
+            "</form>",
+            "<span>" <> int.to_string(post.down_votes) <> "</span>",
+            "<form action='/post' method='post' style='display:inline'>",
+            "  <input type='hidden' name='action' value='vote'/>",
+            "  <input type='hidden' name='post_id' value='"
               <> int.to_string(post.id)
-              <> "&sub_id="
+              <> "'/>",
+            "  <input type='hidden' name='sub_id' value='"
               <> int.to_string(post.sub_id)
-              <> "&vote=-1\"/>Down Vote</a>",
-            "</p>",
+              <> "'/>",
+            "  <input type='hidden' name='vote' value='-1'/>",
+            "  <button type='submit'>Down Vote</button>",
+            "</form>",
+            "</div>",
           ]
           let comment_form = [
             "<form action='/post' method='post'>",
+            "  <input type='hidden' name='action' value='comment'/>",
             "<h5>",
             "Leave a comment",
             "</h5>",
@@ -291,7 +312,11 @@ pub fn view_post(req: Request, engine: Subject(EngineMessage)) -> Response {
                     comment_form,
                   ),
                 )
-
+              let html_list =
+                list.append(html_list, [
+                  "<br/><a href='/' class='button-link'>Back to Main Menu</a>",
+                  "</div>",
+                ])
               string.concat(html_list) |> wisp.html_response(200)
             }
             _ -> {
@@ -308,6 +333,11 @@ pub fn view_post(req: Request, engine: Subject(EngineMessage)) -> Response {
 
               let html_list =
                 list.append(html_list, list.append(comments_html, comment_form))
+              let html_list =
+                list.append(html_list, [
+                  "<br/><a href='/' class='button-link'>Back to Main Menu</a>",
+                  "</div>",
+                ])
               string.concat(html_list) |> wisp.html_response(200)
             }
           }
@@ -373,15 +403,13 @@ pub fn my_subreddits(req: Request, server: Subject(ServerMessage)) -> Response {
             "<h1>My SubReddits</h1>",
           ]
           let forms =
-            list.map(subs, fn(sub) {
-              let form =
-                "<form action='/session?_method=DELETE' method='post'><h3>"
-                <> sub.1
-                <> "<input type='hidden' name='sub_id' value='"
-                <> int.to_string(sub.0)
-                <> "'/><input class='button-link' type='submit' value='Leave'/></h3></form>"
-              form
-            })
+            list.map(subs, fn(sub) { "<form action='/subreddits' method='post'>
+                <input type='hidden' name='_method' value='DELETE'/>
+                <h3>" <> sub.1 <> "<input type='hidden' name='sub_id' value='" <> int.to_string(
+                sub.0,
+              ) <> "'/>
+                <input class='button-link' type='submit' value='Leave'/></h3>
+              </form>" })
           let html_list = list.append(html_list, forms)
           let html_list = list.append(html_list, ["</div>"])
           string.concat(html_list) |> wisp.html_response(200)
@@ -466,8 +494,17 @@ pub fn subreddits(
 ) -> Response {
   case req.method {
     Get -> view_subreddits(req, engine)
-    Post -> subscribe(req, server)
-    Delete -> unsubscribe(req, server)
+    Post -> {
+      use formdata <- wisp.require_form(req)
+      let method_override = case list.key_find(formdata.values, "_method") {
+        Ok(value) -> value
+        Error(_) -> "POST"
+      }
+      case method_override {
+        "DELETE" -> unsubscribe(req, server)
+        _ -> subscribe(req, server)
+      }
+    }
     _ -> wisp.method_not_allowed([Get, Post, Delete])
   }
 }
@@ -493,6 +530,7 @@ pub fn view_subreddits(req: Request, engine: Subject(EngineMessage)) -> Response
             <> "'/><input class='button-link' type='submit' value='Join'/></h3></form>"
           form
         })
+
       let html_list = list.append(html_list, forms)
       let html_list = list.append(html_list, ["</div>"])
       string.concat(html_list) |> wisp.html_response(200)
@@ -523,6 +561,13 @@ pub fn subscribe(req: Request, server: Subject(ServerMessage)) -> Response {
               let assert Ok(sub_id) = int.parse(sub_id)
               actor.send(actor, Subscribe(sub_id, sub_name))
               wisp.redirect("/")
+              |> wisp.set_cookie(
+                req,
+                cookie_name,
+                name,
+                wisp.Signed,
+                60 * 60 * 24,
+              )
             }
           }
         }
@@ -539,20 +584,32 @@ pub fn subscribe(req: Request, server: Subject(ServerMessage)) -> Response {
 }
 
 pub fn unsubscribe(req: Request, server: Subject(ServerMessage)) -> Response {
-  let resp = wisp.redirect("/session")
+  use formdata <- wisp.require_form(req)
   case wisp.get_cookie(req, cookie_name, wisp.Signed) {
     Ok(name) -> {
-      let actor_opt = process.call(server, 100, GetUser(_, name))
-      case actor_opt {
-        Error(_) -> {
-          wisp.redirect("/session")
-        }
-        Ok(actor) -> {
-          todo
+      case list.key_find(formdata.values, "sub_id") {
+        Error(_) -> wisp.redirect("/session")
+        Ok(sub_id) -> {
+          let assert Ok(sub_id_int) = int.parse(sub_id)
+          let actor_opt = process.call(server, 100, GetUser(_, name))
+          case actor_opt {
+            Error(_) -> wisp.redirect("/session")
+            Ok(actor) -> {
+              actor.send(actor, Unsubscribe(sub_id_int))
+              wisp.redirect("/")
+              |> wisp.set_cookie(
+                req,
+                cookie_name,
+                name,
+                wisp.Signed,
+                60 * 60 * 24,
+              )
+            }
+          }
         }
       }
     }
-    Error(_) -> resp
+    Error(_) -> wisp.redirect("/session")
   }
 }
 
@@ -600,5 +657,32 @@ pub fn destroy_session(req: Request, server: Subject(ServerMessage)) -> Response
       wisp.set_cookie(resp, req, cookie_name, value, wisp.Signed, 0)
     }
     Error(_) -> resp
+  }
+}
+
+pub fn post_vote(req: Request, engine: Subject(EngineMessage)) -> Response {
+  use formdata <- wisp.require_form(req)
+  case list.key_find(formdata.values, "post_id") {
+    Error(_) -> wisp.redirect("/session")
+    Ok(post_id) -> {
+      case list.key_find(formdata.values, "sub_id") {
+        Error(_) -> wisp.redirect("/session")
+        Ok(sub_id) -> {
+          case list.key_find(formdata.values, "vote") {
+            Error(_) -> wisp.redirect("/session")
+            Ok(vote) -> {
+              let assert Ok(sub) = int.parse(sub_id)
+              let assert Ok(post) = int.parse(post_id)
+              case vote {
+                "1" -> actor.send(engine, UpVotePost(sub, post))
+                "-1" -> actor.send(engine, DownVotePost(sub, post))
+                _ -> Nil
+              }
+              wisp.redirect("/post?post_id=" <> post_id <> "&sub_id=" <> sub_id)
+            }
+          }
+        }
+      }
+    }
   }
 }

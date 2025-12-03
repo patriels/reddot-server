@@ -77,6 +77,7 @@ pub fn main() {
         ["subreddit"] -> routes.subreddit(req, server.data)
         ["message"] -> routes.message(req, server.data, engine.data)
         ["my_subreddits"] -> routes.my_subreddits(req, server.data)
+        ["post_vote"] -> routes.post_vote(req, engine.data)
         // This matches all other paths.
         _ -> wisp.not_found()
       }
