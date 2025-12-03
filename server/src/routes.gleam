@@ -43,6 +43,7 @@ pub fn home_page(req: Request, server: Subject(ServerMessage)) -> Response {
             "<li><a href='/feed'>View Your Feed</a></li>",
             "<li><a href='/subreddit'>Create a SubReddit</a></li>",
             "<li><a href='/my_subreddits'>Subreddits Joined</a></li>",
+            "<li><a href='/inbox'>Inbox</a></li>",
             "</ul>",
             "</div>",
           ]
@@ -191,19 +192,10 @@ pub fn send_message(
               wisp.redirect("/session")
             }
             Ok(actor) -> {
-              logging.log(logging.Info, name <> " wants to create a subreddit ")
-              let actor_opt = process.call(server, 100, GetUser(_, name))
-              case actor_opt {
-                Error(_) -> {
-                  wisp.redirect("/session")
-                }
-                Ok(actor) -> {
-                  let subj =
-                    process.call(engine, 100, types.GetUserSubj(_, username))
-                  actor.send(actor, types.SendMessage(content, subj))
-                  wisp.redirect("/feed")
-                }
-              }
+              let subj =
+                process.call(engine, 100, types.GetUserSubj(_, username))
+              actor.send(actor, types.SendMessage(content, subj))
+              wisp.redirect("/feed")
             }
           }
         }
@@ -429,6 +421,46 @@ pub fn my_subreddits(req: Request, server: Subject(ServerMessage)) -> Response {
   }
 }
 
+pub fn inbox(req: Request, server: Subject(ServerMessage)) -> Response {
+  case wisp.get_cookie(req, cookie_name, wisp.Signed) {
+    Ok(name) -> {
+      let actor_opt = process.call(server, 100, GetUser(_, name))
+      case actor_opt {
+        Error(_) -> {
+          wisp.redirect("/session")
+        }
+        Ok(actor) -> {
+          let messages = process.call(actor, 100, types.GetInbox)
+          let html_list = [
+            get_css(),
+            "<div class='w3-main w3-content w3-padding' style='max-width:1200px;margin-top:100px'>",
+            "<h1>Inbox</h1>",
+          ]
+          let dms =
+            list.map(messages, fn(dm) {
+              let html = [
+                "<div>",
+                "<p class='username'>" <> dm.send_name <> "</p>",
+                "<p>" <> dm.message <> "</p>",
+                "<a href='/message?username=" <> dm.send_name <> "''>",
+                "Message Back",
+                "</a>",
+                "</div>",
+              ]
+              string.concat(html)
+            })
+          let html_list = list.append(html_list, dms)
+          let html_list = list.append(html_list, ["</div>"])
+          string.concat(html_list) |> wisp.html_response(200)
+        }
+      }
+    }
+    Error(_) -> {
+      wisp.redirect("/session")
+    }
+  }
+}
+
 pub fn subreddit(req: Request, server: Subject(ServerMessage)) -> Response {
   case req.method {
     Get -> subreddit_form(req)
@@ -631,13 +663,16 @@ pub fn session(req: Request, server: Subject(ServerMessage)) -> Response {
 
 pub fn new_session() -> Response {
   let html =
-    "<h1>Welcome to Reddot</h1>
+    get_css()
+    <> "<div class='w3-main w3-content w3-padding' style='max-width:1200px;margin-top:100px'>
+    <h1>Welcome to Reddot</h1>
     <form action='/session' method='post'>
         <label>Enter a username to login
           <input type='text' name='name'>
         </label>
         <button type='submit'>Log in</button>
-      </form>"
+      </form>
+      </div>"
   wisp.ok()
   |> wisp.html_body(html)
 }

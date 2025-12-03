@@ -146,7 +146,11 @@ pub type Comment {
 
 //just easier to keep track of what I'm referencing vs using a pair
 pub type DirectMessage {
-  DirectMessage(sender: Subject(AccountMessage), message: String)
+  DirectMessage(
+    sender: Subject(AccountMessage),
+    send_name: String,
+    message: String,
+  )
 }
 
 pub type ServerState {

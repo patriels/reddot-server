@@ -81,6 +81,7 @@ pub fn main() {
           routes.get_new_post(req, sub_id_str, server.data)
         ["subreddits", _sub_id_str, "posts"] ->
           routes.submit_post(req, server.data)
+        ["inbox"] -> routes.inbox(req, server.data)
 
         // This matches all other paths.
         _ -> wisp.not_found()

@@ -88,7 +88,7 @@ pub fn account_message_handler(
     }
     SendMessage(content, recpt) -> {
       let assert Some(self) = state.subject
-      let dm = DirectMessage(self, content)
+      let dm = DirectMessage(self, state.username, content)
       actor.send(recpt, ReceiveDM(dm))
       actor.continue(state)
     }
@@ -478,9 +478,7 @@ pub fn account_message_handler(
             _ -> {
               let assert Some(self) = state.subject
               let reply =
-                DirectMessage(self, {
-                  state.username <> " sent you a really cool message."
-                })
+                DirectMessage(self, state.username, "a really cool message")
               actor.send(message.sender, ReceiveDM(reply))
               actor.continue(
                 Account(..state, inbox: list.append(state.inbox, [message])),
@@ -507,7 +505,8 @@ pub fn account_message_handler(
           let dm =
             DirectMessage(
               self,
-              state.username <> " sent you a really cool message.",
+              state.username,
+              " sent you a really cool message",
             )
           actor.send(other, ReceiveDM(dm))
           Nil
