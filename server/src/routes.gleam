@@ -9,8 +9,8 @@ import gleam/string
 import logging
 import types.{
   type EngineMessage, type ServerMessage, AddUser, DownVotePost,
-  GetAllSubReddits, GetFeed, GetUser, RemoveUser, Subscribe, Unsubscribe,
-  UpVotePost,
+  GetAllSubReddits, GetFeed, GetUser, PostToSub, RemoveUser, Subscribe,
+  Unsubscribe, UpVotePost,
 }
 import utils
 import wisp.{type Request, type Response}
@@ -402,14 +402,21 @@ pub fn my_subreddits(req: Request, server: Subject(ServerMessage)) -> Response {
             "<div class='w3-main w3-content w3-padding' style='max-width:1200px;margin-top:100px'>",
             "<h1>My SubReddits</h1>",
           ]
-          let forms =
-            list.map(subs, fn(sub) { "<form action='/subreddits' method='post'>
-                <input type='hidden' name='_method' value='DELETE'/>
-                <h3>" <> sub.1 <> "<input type='hidden' name='sub_id' value='" <> int.to_string(
+          let forms = list.map(subs, fn(sub) { "<div class='sub-actions'>
+                <form action='/subreddits' method='post' style='display:inline'>
+                  <input type='hidden' name='_method' value='DELETE'/>
+                  <input type='hidden' name='sub_id' value='" <> int.to_string(
                 sub.0,
               ) <> "'/>
-                <input class='button-link' type='submit' value='Leave'/></h3>
-              </form>" })
+                  <input class='button-link' type='submit' value='Leave'/>
+                </form>
+
+                <a class='button-link' href='/subreddits/" <> int.to_string(
+                sub.0,
+              ) <> "/posts/new'>Make a Post</a>
+
+                <h3>" <> sub.1 <> "</h3>
+              </div>" })
           let html_list = list.append(html_list, forms)
           let html_list = list.append(html_list, ["</div>"])
           string.concat(html_list) |> wisp.html_response(200)
@@ -685,4 +692,70 @@ pub fn post_vote(req: Request, engine: Subject(EngineMessage)) -> Response {
       }
     }
   }
+}
+
+pub fn get_new_post(
+  req: Request,
+  sub_id_str: String,
+  server: Subject(ServerMessage),
+) -> Response {
+  case wisp.get_cookie(req, cookie_name, wisp.Signed) {
+    Ok(name) -> {
+      // Check user exists
+      case process.call(server, 100, GetUser(_, name)) {
+        Error(_) -> wisp.redirect("/session")
+        Ok(_actor) -> {
+          logging.log(
+            logging.Info,
+            name <> " wants to post on sub " <> sub_id_str,
+          )
+
+          let html_list = [
+            get_css(),
+            "<div class='w3-main w3-content w3-padding' style='max-width:1200px;margin-top:100px'>",
+            "<h1>Make a Post</h1>",
+            "<form action='/subreddits/"
+              <> sub_id_str
+              <> "/posts' method='post'>",
+            "<input type='hidden' name='sub_id' value='" <> sub_id_str <> "'/>",
+            "<input type='hidden' name='user_name' value='" <> name <> "'/>",
+            "<label for='title'>Title:</label>",
+            "<input type='text' id='title' name='title' required/>",
+            "<label for='content'>Content:</label>",
+            "<textarea name='content' rows='6' required></textarea>",
+            "<input type='submit' value='Submit Post'/>",
+            "</form>",
+            "</div>",
+          ]
+
+          string.concat(html_list) |> wisp.html_response(200)
+        }
+      }
+    }
+    Error(_) -> wisp.redirect("/session")
+  }
+}
+
+pub fn submit_post(req: Request, server: Subject(ServerMessage)) -> Response {
+  use formdata <- wisp.require_form(req)
+
+  let assert Ok(sub_id_str) = list.key_find(formdata.values, "sub_id")
+  let assert Ok(sub_id) = int.parse(sub_id_str)
+  let assert Ok(title) = list.key_find(formdata.values, "title")
+  let assert Ok(content) = list.key_find(formdata.values, "content")
+  let assert Ok(name) = list.key_find(formdata.values, "user_name")
+
+  logging.log(logging.Info, name <> " submitted a post to sub " <> sub_id_str)
+  let actor_opt = process.call(server, 100, types.GetUser(_, name))
+  case actor_opt {
+    Error(_) -> {
+      wisp.redirect("/session")
+    }
+    Ok(actor) -> {
+      actor.send(actor, PostToSub(sub_id, title, content))
+      wisp.redirect("/")
+    }
+  }
+
+  wisp.redirect("/")
 }
