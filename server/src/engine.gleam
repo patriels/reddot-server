@@ -193,7 +193,7 @@ pub fn engine_message_handler(
       let updated_post = Post(..post, up_votes: { post.up_votes + 1 })
 
       //update post owner's karma
-      actor.send(post.author_subject, UpdateKarma(-1))
+      actor.send(post.author_subject, UpdateKarma(1))
 
       //sends a new post with updated karma to the users
       list.each(sub.subscribers, fn(subscriber) {

@@ -42,7 +42,7 @@ pub fn home_page(req: Request, server: Subject(ServerMessage)) -> Response {
             "<li><a href='/subreddits'>View Available SubReddits</a></li>",
             "<li><a href='/feed'>View Your Feed</a></li>",
             "<li><a href='/subreddit'>Create a SubReddit</a></li>",
-            "<li><a href='/my_subreddits'>Subreddits Joined</a></li>",
+            "<li><a href='/my_subreddits'>View Your Subreddits</a></li>",
             "<li><a href='/inbox'>Inbox</a></li>",
             "</ul>",
             "</div>",
@@ -96,6 +96,11 @@ pub fn feed(req: Request, server: Subject(ServerMessage)) -> Response {
             })
 
           let html_list = list.append(html_list, posts)
+          let html_list =
+            list.append(html_list, [
+              "<br/><a href='/' class='button-link'>Back to Main Menu</a>",
+              "</div>",
+            ])
           string.concat(html_list) |> wisp.html_response(200)
         }
       }
@@ -146,7 +151,7 @@ pub fn message_form(req: Request, server: Subject(ServerMessage)) -> Response {
                     "<h1> Send " <> username <> " A Message</h1>",
                     "<form action='/message' method='post'>",
                     "<h5>",
-                    "Leave a comment",
+                    "Type message",
                     "</h5>",
                     "<input type='hidden' name='user_name' value='"
                       <> username
@@ -394,23 +399,40 @@ pub fn my_subreddits(req: Request, server: Subject(ServerMessage)) -> Response {
             "<div class='w3-main w3-content w3-padding' style='max-width:1200px;margin-top:100px'>",
             "<h1>My SubReddits</h1>",
           ]
-          let forms = list.map(subs, fn(sub) { "<div class='sub-actions'>
-                <form action='/subreddits' method='post' style='display:inline'>
+          let forms =
+            list.map(subs, fn(sub) {
+              "<div style='display:flex; align-items:center; gap:12px; margin-bottom:10px'>
+
+                <h3 style='margin:0; padding:0; font-size:18px; line-height:1'>
+                  "
+              <> sub.1
+              <> "
+                </h3>
+
+                <form action='/subreddits' method='post' style='margin:0'>
                   <input type='hidden' name='_method' value='DELETE'/>
-                  <input type='hidden' name='sub_id' value='" <> int.to_string(
-                sub.0,
-              ) <> "'/>
-                  <input class='button-link' type='submit' value='Leave'/>
+                  <input type='hidden' name='sub_id' value='"
+              <> int.to_string(sub.0)
+              <> "'/>
+                  <input class='button-link' type='submit' value='Leave' style='margin:0'/>
                 </form>
 
-                <a class='button-link' href='/subreddits/" <> int.to_string(
-                sub.0,
-              ) <> "/posts/new'>Make a Post</a>
+                <a class='button-link' href='/subreddits/"
+              <> int.to_string(sub.0)
+              <> "/posts/new' style='margin:0'>
+                  Make a Post
+                </a>
 
-                <h3>" <> sub.1 <> "</h3>
-              </div>" })
+              </div>"
+            })
+
           let html_list = list.append(html_list, forms)
           let html_list = list.append(html_list, ["</div>"])
+          let html_list =
+            list.append(html_list, [
+              "<br/><a href='/' class='button-link'>Back to Main Menu</a>",
+              "</div>",
+            ])
           string.concat(html_list) |> wisp.html_response(200)
         }
       }
@@ -572,6 +594,11 @@ pub fn view_subreddits(req: Request, engine: Subject(EngineMessage)) -> Response
 
       let html_list = list.append(html_list, forms)
       let html_list = list.append(html_list, ["</div>"])
+      let html_list =
+        list.append(html_list, [
+          "<br/><a href='/' class='button-link'>Back to Main Menu</a>",
+          "</div>",
+        ])
       string.concat(html_list) |> wisp.html_response(200)
     }
     Error(_) -> {
@@ -754,10 +781,15 @@ pub fn get_new_post(
               <> "/posts' method='post'>",
             "<input type='hidden' name='sub_id' value='" <> sub_id_str <> "'/>",
             "<input type='hidden' name='user_name' value='" <> name <> "'/>",
-            "<label for='title'>Title:</label>",
-            "<input type='text' id='title' name='title' required/>",
-            "<label for='content'>Content:</label>",
-            "<textarea name='content' rows='6' required></textarea>",
+            "<div style='display:flex; align-items:center; margin:10px 0'>",
+            "  <label for='title' style='width:100px'>Title:</label>",
+            "  <input type='text' id='title' name='title' required style='flex:1'/>",
+            "</div>",
+
+            "<div style='display:flex; align-items:flex-start; margin:10px 0'>",
+            "  <label for='content' style='width:100px; margin-top:4px'>Content:</label>",
+            "  <textarea name='content' rows='6' required style='flex:1'></textarea>",
+            "</div>",
             "<input type='submit' value='Submit Post'/>",
             "</form>",
             "</div>",
