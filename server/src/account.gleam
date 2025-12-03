@@ -210,7 +210,7 @@ pub fn account_message_handler(
                 Post(
                   0,
                   sub.0,
-                  { "Topic somoneone wants to talk about" },
+                  { "Topic someone wants to talk about" },
                   state.username,
                   self,
                   {
@@ -506,7 +506,7 @@ pub fn account_message_handler(
             DirectMessage(
               self,
               state.username,
-              " sent you a really cool message",
+              " sent you a really cool message.",
             )
           actor.send(other, ReceiveDM(dm))
           Nil
