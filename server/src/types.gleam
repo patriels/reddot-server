@@ -40,8 +40,9 @@ pub type AccountMessage {
   GetInbox(reply_to: Subject(List(DirectMessage)))
   GetKarma(reply_to: Subject(Int))
   GetSubscriptions(reply_to: Subject(List(#(Int, String))))
+  NewSubreddit(title: String)
   SendMessage(content: String, recpt: Subject(AccountMessage))
-  Subscribe(sub_id: Int)
+  Subscribe(sub_id: Int, sub_name: String)
   Unsubscribe(sub_id: Int)
   PostToSub(sub_id: Int, title: String, content: String)
   MakeAComment(sub_id: Int, post_id: Int, parent_id: Int, content: String)
@@ -93,7 +94,8 @@ pub type EngineMessage {
   GetAUser(user: Subject(AccountMessage), username: String)
   //user notifies engine it's off or online
   OnlineUpdate(int: Int)
-  GetPost(sub_id: Int, post_id: Int)
+  GetPost(reply_to: Subject(Post), sub_id: Int, post_id: Int)
+  GetUserSubj(reply_to: Subject(Subject(AccountMessage)), username: String)
 }
 
 //trying to replicate a database so this would be the subreddit table
@@ -161,5 +163,4 @@ pub type ServerMessage {
     reply_to: Subject(Result(Subject(AccountMessage), Nil)),
     username: String,
   )
-  GetRandomUser(reply_to: Subject(Subject(AccountMessage)), usernane: String)
 }

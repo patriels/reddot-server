@@ -18,6 +18,9 @@ pub fn get_css() -> String {
         text-decoration: underline;
         cursor: pointer;
       }
+      .username{
+        font-weight: bold;
+      }
     </style>",
     "</head>",
   ]

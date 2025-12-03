@@ -3,6 +3,7 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/pair
+import gleam/string
 import gleam/time/duration
 import gleam/time/timestamp
 import types.{type Comment, type Engine, type Post, type SubReddit}
@@ -153,4 +154,43 @@ pub fn print_engine(reddit: Engine) -> Nil {
     <> "\n"
     <> "-----------------------------------------------------------\n",
   )
+}
+
+pub fn get_comments(
+  post_comments: dict.Dict(Int, List(Comment)),
+  sub_id: Int,
+  post_id: Int,
+  parent_id: Int,
+  comments: List(Comment),
+  space: String,
+) -> List(String) {
+  list.map(comments, fn(comment) {
+    let this_comment =
+      "<p>"
+      <> space
+      <> "<span class='username'>"
+      <> comment.author_username
+      <> ": "
+      <> "</span>"
+      <> comment.content
+      <> "</p>"
+    //check if this comment has subcomments
+    case dict.get(post_comments, comment.id) {
+      Ok(list_comment) -> {
+        let child_comments =
+          get_comments(
+            post_comments,
+            sub_id,
+            post_id,
+            comment.id,
+            list_comment,
+            space <> "  ",
+          )
+        string.concat(list.append([this_comment], child_comments))
+      }
+      Error(_) -> {
+        this_comment
+      }
+    }
+  })
 }

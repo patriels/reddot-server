@@ -11,10 +11,10 @@ import gleam/pair
 import gleam/time/timestamp
 import logging
 import mist
-import routes.{feed, get_random_user, home_page, post, session, subreddits}
+import routes.{feed, home_page, post, session, subreddits}
 import types.{
-  type ServerMessage, type ServerState, AddUser, Engine, GetRandomUser, GetUser,
-  Join, Leave, RemoveUser, ServerState, Start,
+  type ServerMessage, type ServerState, AddUser, Engine, GetUser, Join, Leave,
+  RemoveUser, ServerState, Start,
 }
 import utils.{create_default_subs}
 import wisp.{type Request, type Response}
@@ -69,12 +69,14 @@ pub fn main() {
       use <- wisp.serve_static(req, under: "/static", from: "/public")
       case wisp.path_segments(req) {
         // This matches `/`.
-        [] -> home_page(req)
+        [] -> home_page(req, server.data)
         ["session"] -> session(req, server.data)
         ["subreddits"] -> subreddits(req, server.data, engine.data)
         ["feed"] -> feed(req, server.data)
-        ["post"] -> post(req, server.data)
-        ["getuser"] -> get_random_user(req, server.data)
+        ["post"] -> post(req, server.data, engine.data)
+        ["subreddit"] -> routes.subreddit(req, server.data)
+        ["message"] -> routes.message(req, server.data, engine.data)
+        ["my_subreddits"] -> routes.my_subreddits(req, server.data)
         // This matches all other paths.
         _ -> wisp.not_found()
       }
@@ -117,7 +119,9 @@ pub fn server_handler(
       )
     }
     RemoveUser(username) -> {
+      let assert Ok(user) = dict.get(state.users, username)
       actor.send(state.engine, Leave(username))
+      actor.send(user, types.Quit)
       actor.continue(
         ServerState(..state, users: dict.delete(state.users, username)),
       )
@@ -126,30 +130,6 @@ pub fn server_handler(
       let user = dict.get(state.users, username)
       process.send(reply, user)
       actor.continue(state)
-    }
-    GetRandomUser(reply, username) -> {
-      let len = dict.size(state.users)
-      case len {
-        //you're the ony user so message yourself (handled on user side)
-        1 -> {
-          let assert Ok(user) = dict.get(state.users, username)
-          actor.send(reply, user)
-          actor.continue(state)
-        }
-        _ -> {
-          //remove the user who initaiated the request
-          let filtered = dict.delete(state.users, username)
-          let users = dict.values(filtered)
-          //select a random index in the list
-          let index = int.random(len - 1)
-          //split list before that index
-          let split = list.split(users, index)
-          //get the user
-          let assert Ok(other_user) = list.first(pair.second(split))
-          actor.send(reply, other_user)
-          actor.continue(state)
-        }
-      }
     }
   }
 }

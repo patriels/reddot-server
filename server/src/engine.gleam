@@ -394,7 +394,15 @@ pub fn engine_message_handler(
     OnlineUpdate(num) -> {
       actor.continue(Engine(..state, online: { state.online + num }))
     }
-    GetPost(_sub_id, _post_id) -> {
+    GetPost(reply, sub_id, post_id) -> {
+      let assert Ok(sub) = dict.get(state.subreddits, sub_id)
+      let assert Ok(post) = dict.get(sub.posts, post_id)
+      process.send(reply, post)
+      actor.continue(state)
+    }
+    types.GetUserSubj(reply, username) -> {
+      let assert Ok(other) = dict.get(state.users, username)
+      actor.send(reply, other)
       actor.continue(state)
     }
   }

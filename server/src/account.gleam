@@ -81,16 +81,25 @@ pub fn account_message_handler(
       actor.send(reply, state.subreddits)
       actor.continue(state)
     }
+    types.NewSubreddit(title) -> {
+      actor.send(state.reddit_engine, CreateSubReddit(title))
+      actor.continue(state)
+    }
     SendMessage(content, recpt) -> {
       let assert Some(self) = state.subject
       let dm = DirectMessage(self, content)
       actor.send(recpt, ReceiveDM(dm))
       actor.continue(state)
     }
-    Subscribe(sub_id) -> {
+    Subscribe(sub_id, sub_name) -> {
       let assert Some(self) = state.subject
       actor.send(state.reddit_engine, JoinSubReddit(sub_id, self))
-      actor.continue(state)
+      actor.continue(
+        Account(
+          ..state,
+          subreddits: list.append(state.subreddits, [#(sub_id, sub_name)]),
+        ),
+      )
     }
     Unsubscribe(sub_id) -> {
       let assert Some(self) = state.subject
